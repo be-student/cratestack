@@ -1,5 +1,17 @@
 ## Unreleased
 
+## 0.12.0 (2026-09-06)
+
+- No functional changes to this package. Version kept in lockstep with the
+  CrateStack workspace, which every published CrateStack artifact shares.
+- The one workspace change that reaches this package's native side is inert
+  here: `cratestack-client-flutter` — the frb-bridged crate this package's
+  codec ships from — gained a `middleware` Cargo feature forwarding
+  `cratestack-client-rust`'s pluggable HTTP transport (#926, #927). It is
+  additive and off by default, adds nothing to the dependency graph unless
+  enabled, and does not touch the CBOR bridge: the only diff in that crate is
+  the feature declaration in its `Cargo.toml`, with no source change.
+
 ## 0.11.1 (2026-09-03)
 
 - **`example/tool/verify_web_console.dart`'s headless-Chrome readiness check no longer flakes on a

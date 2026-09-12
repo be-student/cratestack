@@ -13,6 +13,14 @@ fn assert_reserved(source: &str, keyword: &str, subject: &str) {
         .to_string();
     assert!(message.contains(keyword), "error: {message}");
     assert!(message.contains(subject), "error: {message}");
+    for owner in ["Probe", "UserAuth", "State", "lookup"] {
+        if source.contains(owner) {
+            assert!(
+                message.contains(&format!("`{owner}`")),
+                "owner missing: {message}"
+            );
+        }
+    }
     assert!(message.contains("reserved"), "error: {message}");
     assert!(message.contains("multi-file schemas"), "error: {message}");
 }
@@ -132,4 +140,18 @@ model Probe {
         .map(|field| field.name.as_str())
         .collect();
     assert_eq!(names, ["id", "of", "partOf", "important", "Import"]);
+}
+
+#[test]
+fn block_keyword_errors_underline_only_the_name() {
+    for keyword in ["part", "import"] {
+        for source in [
+            format!("  auth {keyword} {{\n  id String\n}}"),
+            format!("  datasource {keyword} {{\n  provider = \"postgresql\"\n}}"),
+        ] {
+            let error = parse_schema(&source).expect_err("reserved block name");
+            let start = source.find(keyword).unwrap();
+            assert_eq!(error.span(), start..start + keyword.len());
+        }
+    }
 }

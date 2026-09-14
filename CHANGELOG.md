@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Refresh the locked TLS dependency
+
+The workspace lockfile now selects rustls 0.23.45, the patched release for
+[RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285.html).
+This restores the dependency advisory gate without suppressing the advisory or
+changing the selected TLS providers.
+
 ### Reserve `part` and `import` for multi-file schemas — breaking (#922)
 
 Every `.cstack` identifier position now rejects the exact, case-sensitive words

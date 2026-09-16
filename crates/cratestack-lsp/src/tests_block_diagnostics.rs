@@ -6,7 +6,9 @@ use crate::analyze::analyze_document;
 
 #[test]
 fn block_diagnostics_select_the_name_with_lf_and_crlf() {
-    let uri = Uri::from_str("file:///schema.cstack").unwrap();
+    let Ok(uri) = Uri::from_str("file:///schema.cstack") else {
+        unreachable!("the fixture URI is a literal")
+    };
     for newline in ["\n", "\r\n"] {
         for (kind, body) in [
             ("datasource", "  provider = \"postgresql\""),

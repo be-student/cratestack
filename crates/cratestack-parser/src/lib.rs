@@ -75,6 +75,8 @@ mod tests_reserved_keywords;
 #[cfg(test)]
 mod tests_snake_case_collisions;
 #[cfg(test)]
+mod tests_span_support;
+#[cfg(test)]
 mod tests_spatial;
 #[cfg(test)]
 mod tests_stream_attribute;

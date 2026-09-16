@@ -5,12 +5,10 @@
 //! unavailable in every identifier position also prevents tooling from
 //! needing context-specific keyword lists.
 
-use super::parse_schema;
+use super::tests_span_support::{offset_of, parse_err, parse_ok};
 
 fn assert_reserved(source: &str, keyword: &str, subject: &str) {
-    let message = parse_schema(source)
-        .expect_err("the multi-file keyword must be rejected")
-        .to_string();
+    let message = format!("{}", parse_err(source));
     assert!(message.contains(keyword), "error: {message}");
     assert!(message.contains(subject), "error: {message}");
     for owner in ["Probe", "UserAuth", "State", "lookup"] {
@@ -121,7 +119,7 @@ fn rejects_multifile_keywords_at_every_identifier_site() {
 
 #[test]
 fn reserves_exact_case_sensitive_words_without_reserving_of() {
-    let schema = parse_schema(
+    let schema = parse_ok(
         r#"
 model Probe {
   id Int @id
@@ -131,8 +129,7 @@ model Probe {
   Import String
 }
 "#,
-    )
-    .expect("`of`, substrings, and differently cased names stay available");
+    );
 
     let names: Vec<_> = schema.models[0]
         .fields
@@ -149,8 +146,8 @@ fn block_keyword_errors_underline_only_the_name() {
             format!("  auth {keyword} {{\n  id String\n}}"),
             format!("  datasource {keyword} {{\n  provider = \"postgresql\"\n}}"),
         ] {
-            let error = parse_schema(&source).expect_err("reserved block name");
-            let start = source.find(keyword).unwrap();
+            let error = parse_err(&source);
+            let start = offset_of(&source, keyword);
             assert_eq!(error.span(), start..start + keyword.len());
         }
     }

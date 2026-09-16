@@ -1,6 +1,8 @@
 //! Block names must retain byte-accurate spans without re-reading source during validation.
 
-use super::parse_schema;
+use cratestack_core::{Schema, SourceSpan};
+
+use super::tests_span_support::{offset_of, parse_err, parse_ok, present};
 
 fn block_source(prefix: &str, kind: &str, name: &str, newline: &str) -> String {
     let body = if kind == "auth" {
@@ -11,13 +13,21 @@ fn block_source(prefix: &str, kind: &str, name: &str, newline: &str) -> String {
     format!("{prefix}  {kind} {name} {{\n{body}\n}}").replace('\n', newline)
 }
 
+fn block_name_span(schema: Schema, kind: &str) -> SourceSpan {
+    let span = if kind == "auth" {
+        schema.auth.map(|block| block.name_span)
+    } else {
+        schema.datasource.map(|block| block.name_span)
+    };
+    present(span, &format!("{kind} block"))
+}
+
 #[test]
 fn valid_blocks_accept_lf_and_crlf_after_preceding_lines() {
     for newline in ["\n", "\r\n"] {
         for prefix in ["", "\n", "transport rest\n// café project schema\n"] {
             for (kind, name) in [("datasource", "db"), ("auth", "UserAuth")] {
-                let source = block_source(prefix, kind, name, newline);
-                parse_schema(&source).unwrap_or_else(|error| panic!("{source:?}: {error}"));
+                parse_ok(&block_source(prefix, kind, name, newline));
             }
         }
     }
@@ -30,10 +40,10 @@ fn reserved_blocks_keep_exact_spans_with_lf_and_crlf() {
             for kind in ["datasource", "auth"] {
                 for name in ["part", "import"] {
                     let source = block_source(prefix, kind, name, newline);
-                    let error = parse_schema(&source).expect_err("reserved block name");
-                    let start = source.find(&format!("{kind} {name}")).unwrap() + kind.len() + 1;
+                    let error = parse_err(&source);
+                    let start = offset_of(&source, &format!("{kind} {name}")) + kind.len() + 1;
                     assert_eq!(error.span(), start..start + name.len(), "{source:?}");
-                    let message = error.to_string();
+                    let message = format!("{error}");
                     assert!(
                         message.contains("reserved for multi-file schemas"),
                         "{message}"
@@ -56,13 +66,8 @@ fn block_name_spans_skip_matching_text_in_the_declaration_keyword() {
         ] {
             let source = block_source("// café\n\n", kind, name, newline)
                 .replace(&format!("  {kind} "), &format!("\t{kind}   "));
-            let schema = parse_schema(&source).expect("valid block name");
-            let span = if kind == "auth" {
-                schema.auth.unwrap().name_span
-            } else {
-                schema.datasource.unwrap().name_span
-            };
-            let start = source.find(&format!("{kind}   {name}")).unwrap() + kind.len() + 3;
+            let span = block_name_span(parse_ok(&source), kind);
+            let start = offset_of(&source, &format!("{kind}   {name}")) + kind.len() + 3;
             assert_eq!(span.start..span.end, start..start + name.len());
             assert_eq!(&source[span.start..span.end], name);
             assert_eq!(span.line, 3);
@@ -74,16 +79,16 @@ fn block_name_spans_skip_matching_text_in_the_declaration_keyword() {
 fn consecutive_blocks_and_fields_have_exact_spans_with_mixed_line_endings() {
     let source = "// café\r\n\ndatasource source {\r\n  provider = \"postgresql\"\n}\r\n\
                   model model {\r\n  id Int @id\n}\r\nauth auth {\r\n  id String\r\n}\n";
-    let schema = parse_schema(source).expect("valid blocks with mixed line endings");
-    let datasource = schema.datasource.unwrap();
-    let model = &schema.models[0];
-    let auth = schema.auth.unwrap();
+    let schema = parse_ok(source);
+    let model_name_span = schema.models[0].name_span;
+    let datasource = present(schema.datasource, "datasource block");
+    let auth = present(schema.auth, "auth block");
     for (span, declaration, name) in [
         (datasource.name_span, "datasource source", "source"),
-        (model.name_span, "model model", "model"),
+        (model_name_span, "model model", "model"),
         (auth.name_span, "auth auth", "auth"),
     ] {
-        let start = source.find(declaration).unwrap() + declaration.len() - name.len();
+        let start = offset_of(source, declaration) + declaration.len() - name.len();
         assert_eq!(span.start..span.end, start..start + name.len());
     }
     for (span, body) in [

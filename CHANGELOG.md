@@ -2,13 +2,6 @@
 
 ## Unreleased
 
-### Refresh the locked TLS dependency
-
-The workspace lockfile now selects rustls 0.23.45, the patched release for
-[RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285.html).
-This restores the dependency advisory gate without suppressing the advisory or
-changing the selected TLS providers.
-
 ### Reserve `part` and `import` for multi-file schemas — breaking (#922)
 
 Every `.cstack` identifier position now rejects the exact, case-sensitive words
@@ -26,6 +19,116 @@ serialized schema representation; code constructing these structs must supply
 the field. Validation consumes the parsed span instead of searching the source
 again. Regression checks pin each diagnostic's owner name and ensure names such
 as `datasource source` underline the identifier rather than part of the keyword.
+
+### `rustls` moves to 0.23.45 (RUSTSEC-2026-0285), and the scanner that found it stops hiding its own failures
+
+`Quality` has been red on `main` since 2026-09-16. The cause is a real
+advisory, not a configuration problem: **RUSTSEC-2026-0285**, in `rustls`
+0.23.43 — TLS 1.3 handshake messages were accepted at the wrong encryption
+level when they followed a key-changing message in the same record, which
+RFC 8446 §5.1 requires be rejected. The handshake transcript is still
+authenticated, so this is not a handshake-forgery vector; the practical
+effect is that a peer can send handshake messages in plaintext that should
+have been encrypted, and rustls does not terminate the connection.
+
+`rustls` is pinned to 0.23.45 in the workspace lock and in all five
+standalone example locks (`client-only-verification`,
+`no-database-verification`, `no-database-verification-api`,
+`declarative-query-verification`, `db-transaction-verification`). All six
+had to move together: CI builds those workspaces with `--locked`, and a
+lock left behind fails the build rather than the advisory check. `cargo deny
+check all` now reports `advisories ok, bans ok, licenses ok, sources ok`.
+
+**Three separate defects made that one-line cause take a forensic pass to
+find.** Each is fixed here, because a scanner nobody can read the output of
+is not a scanner.
+
+**The failure message was truncated out of the log.** `.ci/quality/run.sh`
+reports a cargo-deny failure at the very end, by design, so every other
+scanner still gets to produce a report first. But it also piped two
+enormous streams through `tee` into the console on the way there:
+`cargo deny check all` prints a full dependency tree per finding (~14k lines
+on this workspace), and `semgrep` was passed **both** `--sarif` and
+`--sarif-output`. Those two flags are not complementary — `--sarif` switches
+stdout to the SARIF document while `--sarif-output` writes the same document
+to a file, so the ~1.4 MB report was emitted twice, once of it straight into
+the step log. Between them they exhausted GitHub's per-step log budget
+*before* the script reached its own fatal error. The visible end of the
+failing job was an unrelated semgrep rule warning, which pointed every
+reader at the wrong scanner.
+
+Now: cargo-deny's full report is redirected to `cargo-deny.txt` (still
+uploaded as a build artifact) and the console gets its `error[...]` headline
+lines plus the per-category summary; `--sarif` is dropped, which was
+verified against the pinned semgrep 1.171.0 to leave the SARIF file
+byte-identical as parsed JSON while replacing megabytes of stdout with a
+short human summary. The console output of a failing run went from 25,994
+lines to 12,133 — and the cause is now stated in line 4, not only line
+12,132.
+
+**And a fatal error now also emits a GitHub Actions `::error::`
+annotation.** Annotations are rendered from the API rather than the log
+body, so the reason a job failed survives truncation no matter how loud a
+future scanner becomes. Outside Actions the prefix is inert text.
+
+**One semgrep rule had never run.** `ts-any-type` used the patterns
+`": any"` and `"as any"`, and **neither is a parseable standalone TypeScript
+construct** — semgrep rejected the whole rule with
+`Invalid pattern for TypeScript: Stdlib.Parsing.Parse_error` on every run
+since it was written, which takes the rule out entirely, valid halves
+included. It is rewritten as complete constructs (`$X as any`,
+`let/const/var $X: any = $Y`, `function $F(...): any { ... }`), verified on
+a fixture holding one of each. An arrow parameter and an interface member
+are knowingly not covered; a `pattern-regex` would cover them and was
+rejected on evidence — run against this repository it produced exactly one
+finding, and that finding was the phrase "same as any direct API consumer
+would" *inside a comment*. Semgrep patterns do not see comments; a regex
+does. Across the whole repository the corrected rule produces **zero**
+findings, so restoring it adds no review noise — it only stops semgrep
+reporting a rule error on every run.
+
+### Agent skills are a third repo, and a PR that announces a change now has to say what happened to them
+
+CrateStack's user-facing surface is documented for humans at
+[cratestack-docs](https://github.com/cratestack/cratestack-docs). It is now also
+documented for coding agents at
+[cratestack-skills](https://github.com/cratestack/cratestack-skills), installable
+with `npx skills add cratestack/cratestack-skills` — fourteen skills covering the
+schema language, the four facades, the server, policy and auth, data integrity,
+embedded SQLite, the three client generators, RPC, migrations, the CLI, Studio,
+editor tooling, troubleshooting, and this repo's own conventions.
+
+The two companions fail differently, and the second failure is the dangerous one.
+Stale prose misleads a human who is already reading sceptically. A stale skill
+instructs a coding agent to generate code against a surface that no longer
+exists — confidently, fluently, and at scale, with the tooling vouching for it.
+
+So a PR that adds a `### ` entry under `## Unreleased` must now fill in section 9
+of the pull request template with a link for each companion, or `n/a — <reason>`.
+A bare `n/a` is rejected: the reason is what makes it a decision rather than an
+omission. The gate is `just verify-parity-declaration`, wired as the CI job
+`docs & skills parity (declaration)`.
+
+**Read what that gate actually proves.** It reads the PR body and nothing else.
+It cannot see the other two repositories, so a green run means somebody wrote
+down what they did — not that docs or skills are in sync. That limit is stated in
+the script, in the recipe, in the CI job comment and in the failure output,
+because a checker whose scope is misread is worse than no checker.
+
+The trigger is the changelog rather than a path allowlist on purpose. "Did this
+PR touch `crates/cratestack-macros/`" fires on nearly every PR here, including
+pure refactors with no surface change, and a gate that fires on everything gets
+rubber-stamped and then stops meaning anything. A `### ` entry under
+`## Unreleased` is this repo's own existing signal for "a human needs to be told
+about this", so it costs no new metadata. The diff-parsing machinery is reused
+wholesale from `changelog-placement-check.sh` (cratestack#739) rather than
+reimplemented, and entries that land under a dated heading the same diff created
+are excluded — a release bump promoting `## Unreleased` is not announcing
+anything new.
+
+Consequence, by design: a PR that ships a user-facing feature and writes no
+changelog entry passes this gate. Closing that would mean a generic "every PR
+needs a changelog entry" rule, which this repo has considered and not adopted.
 
 ### Optional scalars now expose equality filters on generated list routes (#953)
 

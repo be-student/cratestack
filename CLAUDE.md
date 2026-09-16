@@ -34,8 +34,16 @@ Most workflows are encoded in the `justfile` (`just --list`). The important ones
   integration tests (`banking_*`, `policy_db_*`, `generated_client_rust`) **skip silently** when
   `CRATESTACK_TEST_DATABASE_URL` is unset — a green run here does *not* mean full coverage.
   Two flags to avoid: `embedded_flutter_native` needs flutter_rust_bridge-generated glue that isn't
-  checked in (hence the `--exclude`, mirroring the `just` recipes), and `--all-features` enables both
-  mutually-exclusive `decimal-*` backends, which trips a `compile_error!` in `cratestack-core`.
+  checked in (hence the `--exclude`, mirroring the `just` recipes), and `--all-features` does not
+  compile — for two reasons, neither of them the decimal backends. It turns on
+  `cratestack-client-flutter`'s `frb-glue` feature, whose `mod frb_generated;` is the same
+  uncommitted glue (E0583) — and `--exclude` cannot help there, it is a framework crate, not an
+  example. It also turns on `cratestack-pg`'s `crypto-aws-lc-rs`, a deliberately empty feature
+  (`crates/cratestack-pg/Cargo.toml`) whose entire purpose is to hard-`compile_error!`
+  (`crates/cratestack-pg/src/lib.rs`) rather than let `install_fips_crypto_provider` return `Ok(())`
+  without installing a FIPS provider, as it once did (cratestack#334). The `decimal-*` backends are
+  **not** a reason any more: since cratestack#505 any combination of them may be selected — see
+  "Decimal backend selection: additive, not mutually exclusive" below.
 - **PG-backed tests:** `just test-pg` — brings up the Postgres container from `compose.yml` (port `55432`),
   runs the full suite, and tears the container down on exit even on failure. `just test-pg-only` is the
   faster inner loop (server facade only). `just test-pg-tc` uses ephemeral per-binary testcontainers
@@ -216,6 +224,17 @@ tarballs that `cargo publish` includes explicitly. `just publish-studio` re-bund
   `@computed` params surface shipped REST-only in v1 and closing the gap took three follow-up PRs
   (cratestack#724 and kin). If a transport is genuinely excluded, that is a design-doc'd,
   changelog'd decision — not an omission.
+- **Docs and skills parity — a feature is not done until all three repos agree.** A user-facing
+  change has two companions, and they drift in opposite directions: `cratestack/cratestack-docs`
+  (Mintlify, for humans) goes stale, and `cratestack/cratestack-skills` (agent skills, installed
+  with `npx skills add cratestack/cratestack-skills`) actively teaches coding agents to generate
+  code against a surface that no longer exists — which is worse than a gap, because the agent is
+  confident. Any PR that adds a `### ` entry under `## Unreleased` must therefore fill in section 9
+  of the PR template with a link for each companion, or `n/a — <reason>`; a bare `n/a` is rejected.
+  `just verify-parity-declaration` (CI job `docs & skills parity (declaration)`) enforces it.
+  **Read what that gate actually proves:** it reads the PR body and nothing else. It cannot see the
+  other two repositories, so a green run means somebody wrote down what they did — not that docs or
+  skills are in sync. Which skill a change belongs in is mapped in the skills repo's `COVERAGE.md`.
 - Rust source uses `snake_case` filenames (rustfmt convention); all other files are `kebab-case`.
 - **200-LoC file ceiling:** there is an active, validated convention of keeping each source file under
   ~200 lines, splitting larger files by concern (this is why `macros/` and `axum/` are deeply nested).

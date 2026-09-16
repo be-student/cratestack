@@ -162,7 +162,7 @@ targets:
 
 | Target | How |
 | --- | --- |
-| Native mobile (iOS, Android) | FFI / `flutter_rust_bridge` |
+| Native mobile (iOS, Android) | FFI / `flutter_rust_bridge` (Flutter), local Expo native module (React Native) |
 | Native desktop (Linux, macOS, Windows) | direct |
 | Browser | `wasm32-unknown-unknown` + OPFS persistence via `sqlite-wasm-rs` |
 
@@ -248,6 +248,7 @@ index in [`examples/README.md`](examples/README.md). A sample:
 | Browser: wasm + OPFS + Vite | `examples/embedded-browser-vite` |
 | React 19 + Vite + Tailwind + DaisyUI | `examples/react-vite-daisyui` |
 | Next.js 16: wasm in the browser, napi on the server, typed HTTP client upstream | `examples/react-nextjs-daisyui` |
+| React Native: Expo + embedded SQLite | `examples/embedded-expo` |
 | Flutter + Riverpod, generated Dart client | `examples/flutter-riverpod` |
 | Tauri 2 desktop shell | `examples/tauri-web` |
 
@@ -296,8 +297,12 @@ cargo test  --workspace --exclude embedded_flutter_native
 just all-checks     # the canonical pre-PR gate: fmt, clippy, check, cargo-deny
 ```
 
-Never pass `--all-features`: it enables both mutually-exclusive `decimal-*`
-backends and trips a `compile_error!` in `cratestack-core`.
+Never pass `--all-features`: it does not compile. It turns on
+`cratestack-client-flutter`'s `frb-glue` feature, which needs the same
+uncommitted `flutter_rust_bridge` glue (E0583), and `cratestack-pg`'s
+`crypto-aws-lc-rs`, an empty feature that exists only to fail loudly rather
+than let `install_fips_crypto_provider` report success without installing a
+FIPS provider ([#334](https://github.com/cratestack/cratestack/issues/334)).
 
 ### AI governance
 

@@ -10,6 +10,8 @@ mod validate;
 mod tests_attribute_spacing;
 #[cfg(test)]
 mod tests_basic;
+#[cfg(test)]
+mod tests_block_spans;
 mod tests_builder_add_setter_collisions;
 #[cfg(test)]
 mod tests_builder_collisions;

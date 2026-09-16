@@ -129,7 +129,7 @@ pub(crate) fn validate_schema_collecting(
         validate_procedure_model_handler_collisions(schema)
     });
     collect::record(&mut errors, || validate_client_method_collisions(schema));
-    collect::record(&mut errors, || validate_datasource(schema, source));
+    collect::record(&mut errors, || validate_datasource(schema));
     collect::record(&mut errors, || {
         validate_no_models_under_datasource_none(schema)
     });
@@ -177,13 +177,7 @@ pub(crate) fn validate_schema_collecting(
     );
     validate_enums_collecting(schema, &mut errors);
     collect::record(&mut errors, || {
-        validate_auth(
-            schema,
-            source,
-            &type_names,
-            &page_item_type_names,
-            &model_names,
-        )
+        validate_auth(schema, &type_names, &page_item_type_names, &model_names)
     });
     collect::record(&mut errors, || {
         validate_procedures(schema, &type_names, &page_item_type_names, &model_names)
@@ -204,11 +198,11 @@ pub(crate) fn validate_schema_collecting(
     errors
 }
 
-fn validate_datasource(schema: &Schema, source: &str) -> Result<(), SchemaError> {
+fn validate_datasource(schema: &Schema) -> Result<(), SchemaError> {
     if let Some(datasource) = &schema.datasource {
         reserved_idents::validate_reserved_identifier(
             &datasource.name,
-            reserved_idents::block_name_span(source, datasource.span, &datasource.name)?,
+            datasource.name_span,
             &format!("datasource `{}`", datasource.name),
         )?;
         let provider = datasource_provider(schema);

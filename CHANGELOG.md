@@ -20,7 +20,12 @@ word `of` remains available: reserving `part` is sufficient to protect a future
 `part of` grammar sequence.
 
 Errors underline the reserved name in `auth` and `datasource` headers as precisely
-as other declarations, and regression checks pin each diagnostic's owner name.
+as other declarations, including CRLF and mixed-line-ending schemas. Their names
+now carry `name_span` in the public `AuthBlock` and `Datasource` AST structs and
+serialized schema representation; code constructing these structs must supply
+the field. Validation consumes the parsed span instead of searching the source
+again. Regression checks pin each diagnostic's owner name and ensure names such
+as `datasource source` underline the identifier rather than part of the keyword.
 
 ### Optional scalars now expose equality filters on generated list routes (#953)
 

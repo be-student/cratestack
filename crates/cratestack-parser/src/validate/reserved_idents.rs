@@ -20,28 +20,6 @@
 use cratestack_core::SourceSpan;
 
 use crate::diagnostics::{SchemaError, span_error};
-use crate::line_helpers::{Line, token_span_in_line};
-
-/// Recover the declaration-name span without changing the public block AST.
-pub(super) fn block_name_span(
-    source: &str,
-    block: SourceSpan,
-    name: &str,
-) -> Result<SourceSpan, SchemaError> {
-    let raw = source
-        .get(block.start..block.end)
-        .and_then(|text| text.lines().next())
-        .ok_or_else(|| span_error("cannot locate block header", block))?;
-    token_span_in_line(
-        &Line {
-            raw,
-            trimmed: raw.trim(),
-            number: block.line,
-            start: block.start,
-        },
-        name,
-    )
-}
 
 const MULTI_FILE_SCHEMA_KEYWORDS: &[&str] = &["part", "import"];
 
